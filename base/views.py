@@ -1,7 +1,13 @@
 from django.shortcuts import render,redirect
 from django.db.models import Q
-from .models import Room, Topic
+from .models import Room, Topic, Messages
 from .forms import RoomForm
+from django.contrib.auth.models import User
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
+from django.contrib.auth.forms import UserCreationForm
 
 
 # Create your views here.
@@ -27,13 +33,22 @@ def home(request):
 def room(request,pk):
     
     room = Room.objects.get(id = pk)
+    room_messages = room.messages_set.all().order_by('-created')
+
+    if request.method =='POST':
+        message = Messages.objects.create(
+            user = request.user,
+            room = room,
+            body = request.POST.get('body')
+        )
+        return redirect('room', pk= room.id)
     
-    context = {"room":room}
+    context = {"room":room, "room_messages":room_messages}
 
    
     return render(request,'base/room.html', context)
 
-
+@login_required(login_url='login')
 def createRoom(request):
     form = RoomForm()
     if request.method == "POST":
@@ -46,10 +61,13 @@ def createRoom(request):
     return render(request, 'base/room_form.html',context)
 
 
-
+@login_required(login_url='login')
 def updateRoom(request,pk):
     room = Room.objects.get(id =pk)
     form = RoomForm(instance=room)
+
+    if request.user != room.host:
+        return HttpResponse("You are not allowed here")
 
     if request.method == 'POST':
         form = RoomForm(request.POST, instance=room)
@@ -60,9 +78,74 @@ def updateRoom(request,pk):
     context = {"form":form}
     return render(request, 'base/room_form.html', context)
 
+
+@login_required(login_url='login')
 def deleteRoom(request,pk):
     room = Room.objects.get(id=pk)
+
+    if request.user != room.host:
+        return HttpResponse('You are not allowed here.')
+
+
     if request.method == 'POST':
         room.delete()
         return redirect('home')
     return render(request, 'base/delete.html',{'obj':room})
+
+
+
+
+def loginPage(request):
+
+    page = 'login'
+
+    if request.user.is_authenticated:
+        return redirect('home')
+
+    if request.method == 'POST':
+        username =request.POST.get('username').lower()
+        password = request.POST.get('password')
+
+
+        try:
+          user = User.objects.get(username = username)
+        except:
+            messages.error(request, 'user not exist')
+
+        user = authenticate(request, username = username, password = password)
+
+        if user is not None:
+            login(request,user)
+            return redirect('home')
+        else:
+            messages.error(request, 'username or password doesnt exist')
+
+
+
+    context = {'page':page}
+    return render(request, 'base/login_register.html', context)
+
+
+
+def logoutUser(request):
+    logout(request)
+    return redirect('home')
+
+
+def registerPage(request):
+    
+    form = UserCreationForm()
+
+    if request.method =='POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.username = user.username.lower()
+            user.save()
+            login(request, user)
+            return redirect('home')
+
+        else:
+            messages.error(request, 'An error occured during registration')
+    context = {'form': form}
+    return render(request, 'base/login_register.html', context)

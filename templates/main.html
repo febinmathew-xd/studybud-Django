@@ -10,6 +10,16 @@
     
     {% include 'navbar.html' %}
 
+    {% if messages %}
+
+    <ul class="messages">
+        {% for message in messages %}
+        <li {% if messages.tags %} class="{{messages.tags}}" {% endif %} > {{message}}</li>
+        {% endfor %}
+    </ul>
+
+    {% endif %}
+ 
     {% block content %}
 
 
